@@ -1,0 +1,44 @@
+name: Kumpulkan Data BTC (Otomatis)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # tiap 5 menit
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ambil candle terbaru
+        run: python collect_candles.py
+
+      - name: Commit dataset
+        run: |
+          git config user.name "btc-okx-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add btc_dataset.csv
+          git diff --cached --quiet && echo "Tidak ada perubahan." && exit 0
+          git commit -m "Update data BTC [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "Push berhasil di percobaan ke-$i."
+              exit 0
+            fi
+            echo "Push gagal (percobaan $i/5), pull rebase lalu coba lagi..."
+            git pull --rebase origin main
+            sleep 3
+          done
+          echo "Push tetap gagal setelah 5x percobaan."
+          exit 1
