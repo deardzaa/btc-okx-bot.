@@ -1,0 +1,47 @@
+name: Backfill Data Historis BTC
+
+on:
+  workflow_dispatch:
+    inputs:
+      jumlah_candle:
+        description: 'Berapa candle 1-menit yang mau ditarik'
+        required: false
+        default: '1000'
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Tarik data historis BTC
+        run: python backfill_history.py ${{ github.event.inputs.jumlah_candle }}
+
+      - name: Commit dataset
+        run: |
+          git config user.name "btc-okx-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add btc_dataset.csv
+          git diff --cached --quiet && echo "Tidak ada perubahan." && exit 0
+          git commit -m "Backfill data historis BTC [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "Push berhasil di percobaan ke-$i."
+              exit 0
+            fi
+            echo "Push gagal (percobaan $i/5), pull rebase lalu coba lagi..."
+            git pull --rebase origin main
+            sleep 3
+          done
+          echo "Push tetap gagal setelah 5x percobaan."
+          exit 1
